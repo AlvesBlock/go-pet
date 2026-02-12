@@ -4,7 +4,7 @@ FROM node:20-slim AS base
 WORKDIR /app
 
 # -------------------------
-# deps (inclui dev deps p/ build)
+# deps (com dev deps p/ build)
 # -------------------------
 FROM base AS deps
 COPY package*.json ./
@@ -18,6 +18,12 @@ COPY . .
 RUN npx prisma generate
 RUN npm run build
 
+# DEBUG: imprime estrutura do dist no log do Render
+RUN echo "==== DIST TREE (top 4 levels) ====" \
+ && (find dist -maxdepth 4 -type f -print || true) \
+ && echo "==== LOOKING FOR ENTRYPOINTS ====" \
+ && (find dist -maxdepth 6 -type f \( -name "main.js" -o -name "index.js" \) -print || true)
+
 # -------------------------
 # prod deps (somente produção)
 # -------------------------
@@ -30,24 +36,27 @@ RUN npm ci --omit=dev
 # -------------------------
 FROM base AS prod
 ENV NODE_ENV=production
+ENV PORT=3333
 
-# Dependências de produção
 COPY --from=prod-deps /app/node_modules ./node_modules
-
-# Build output (Nest/TS -> dist)
 COPY --from=build /app/dist ./dist
-
-# Prisma schema + engines/client (se necessário)
 COPY --from=build /app/prisma ./prisma
 COPY --from=build /app/node_modules/.prisma ./node_modules/.prisma
 COPY --from=build /app/node_modules/@prisma ./node_modules/@prisma
-
-# Metadata (opcional, ajuda em alguns runtimes)
 COPY package*.json ./
 
-# Render injeta PORT dinamicamente; seu app deve usar process.env.PORT.
-# EXPOSE é informativo (não "abre" porta sozinho).
 EXPOSE 3333
 
-# Se seu build gerar dist/src/main.js em vez de dist/main.js, troque aqui.
-CMD ["node", "dist/main.js"]
+# Start "inteligente": tenta os caminhos mais comuns do Nest
+CMD ["sh","-lc", "\
+  set -e; \
+  for f in dist/main.js dist/src/main.js dist/apps/api/main.js dist/apps/go-pet-api/main.js; do \
+    if [ -f \"$f\" ]; then \
+      echo \"Starting: node $f\"; \
+      exec node \"$f\"; \
+    fi; \
+  done; \
+  echo \"ERROR: entrypoint não encontrado. Mostrando dist/ para diagnóstico:\"; \
+  find dist -maxdepth 6 -type f -print || true; \
+  exit 1; \
+"]
