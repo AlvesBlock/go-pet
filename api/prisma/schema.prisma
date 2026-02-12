@@ -1,0 +1,45 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum DriverStatus {
+  PENDING
+  APPROVED
+  REJECTED
+  SUSPENDED
+  INACTIVE
+}
+
+enum DriverCategory {
+  BASIC
+  PLUS
+  SUV
+  VET
+}
+
+model Driver {
+  id                  String          @id @default(cuid())
+  name                String
+  email               String          @unique
+  phone               String?
+  status              DriverStatus    @default(PENDING)
+  cnhNumber           String
+  cnhExpiresAt        DateTime
+  cnhDocumentUrl      String?
+  profilePhotoUrl     String?
+  vehicleModel        String
+  vehiclePlate        String          @unique
+  vehicleYear         Int
+  categories          DriverCategory[]
+  equipments          String[]
+  trainingCompletedAt DateTime?
+  applicationNotes    String?
+  applicationHistory  String[]
+  createdAt           DateTime        @default(now())
+  updatedAt           DateTime        @updatedAt
+}
